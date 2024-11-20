@@ -1,0 +1,6 @@
+pixel_manager.settings:
+  title: 'Tracking Pixels'
+  description: 'Manage tracking pixel settings for Pixel Manager.'
+  parent: system_configuration.admin
+  route_name: pixel_manager.settings
+  weight: 0

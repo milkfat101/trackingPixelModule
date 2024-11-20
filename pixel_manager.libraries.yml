@@ -1,0 +1,5 @@
+tracking_pixels:
+  js:
+    js/pm_pixels.js?ver=1: {}
+  dependencies:
+    - core/drupal

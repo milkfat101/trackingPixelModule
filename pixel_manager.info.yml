@@ -1,0 +1,5 @@
+name: 'Pixel Manager'
+type: module
+description: 'Provide website analytics, marketing features, and 3rd party tracking settings.'
+core_version_requirement: ^9 || ^10 || ^11
+package: Marketing Custom Modules

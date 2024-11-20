@@ -1,0 +1,145 @@
+<?php
+
+/**
+ * Implements hook_page_attachments().
+ */
+function pixel_manager_page_attachments(array &$attachments) {
+  $path_service = \Drupal::service('path.current');
+  $alias_manager = \Drupal::service('path_alias.manager');
+  $admin_context = \Drupal::service('router.admin_context');
+  $route_match = \Drupal::routeMatch();
+
+  // Skip admin routes.
+  if ($admin_context->isAdminRoute()) {
+    //\Drupal::logger('pixel_manager')->notice('Skipping pixel attachment on admin route.');
+    return;
+  }
+
+  // Skip node edit routes.
+  $route_name = $route_match->getRouteName();
+  if (strpos($route_name, 'entity.node.edit_form') === 0) {
+    //\Drupal::logger('pixel_manager')->notice('Skipping pixel attachment on node edit form.');
+    return;
+  }
+
+  // Get the current alias and normalized system path.
+  $current_path = $path_service->getPath();
+  $current_alias = $alias_manager->getAliasByPath($current_path);
+  $normalized_alias = rtrim($current_alias, '/'); // Normalize alias.
+
+  // Check if the route corresponds to a node and get the node path.
+  $node_path = NULL;
+  if ($route_match->getRouteName() === 'entity.node.canonical') {
+    $node = $route_match->getParameter('node');
+    if ($node) {
+      $node_path = '/node/' . $node->id();
+    }
+  }
+
+  //\Drupal::logger('pixel_manager')->notice('Processing alias: @alias and path: @path', [
+  //  '@alias' => $current_alias,
+  //  '@path' => $current_path,
+  //]);
+
+  // Load configuration.
+  $config = \Drupal::config('pixel_manager.settings');
+  $pixels = $config->get('pixels') ?? [];
+
+  //\Drupal::logger('pixel_manager')->notice('Loaded pixels: @pixels', ['@pixels' => print_r($pixels, TRUE)]);
+
+  // Attach the tracking_pixels library if needed.
+  if (!empty($pixels)) {
+    $attachments['#attached']['library'][] = 'pixel_manager/pixel_manager_pixels';
+  }
+
+  foreach ($pixels as $pixel) {
+    // Skip disabled pixels.
+    if (empty($pixel['enabled'])) {
+      continue;
+    }
+
+    // Define JavaScript code.
+    $js_code = $pixel['code'];
+
+    // Add global pixels.
+    if ($pixel['scope'] === 'global') {
+      $attachments['#attached']['html_head'][] = [
+        [
+          '#type' => 'html_tag',
+          '#tag' => 'script',
+          '#attributes' => ['type' => 'text/javascript'],
+          '#value' => $js_code,
+        ],
+        'pixel_manager_global_pixel_' . md5($js_code),
+      ];
+    }
+    // Path-specific pixels.
+    elseif ($pixel['scope'] === 'path' && !empty($pixel['paths'])) {
+      foreach ($pixel['paths'] as $path) {
+        $normalized_pixel_path = rtrim(trim($path), '/');
+        if ($normalized_pixel_path === $normalized_alias || ($node_path && $normalized_pixel_path === $node_path)) {
+          //\Drupal::logger('pixel_manager')->notice('Matched pixel path: @pixel_path for alias: @alias or node path: @node_path', [
+          //  '@pixel_path' => $path,
+          //  '@alias' => $normalized_alias,
+          //  '@node_path' => $node_path ?? 'N/A',
+          //]);
+  
+          $attachments['#attached']['html_head'][] = [
+            [
+              '#type' => 'html_tag',
+              '#tag' => 'script',
+              '#attributes' => ['type' => 'text/javascript'],
+              '#value' => $pixel['code'],
+            ],
+            'pixel_manager_path_pixel_' . md5($pixel['code']),
+          ];
+          break; // Stop checking after the first match.
+        }
+      }
+    }
+    // Taxonomy-based pixels for nodes with matching terms.
+    elseif ($pixel['scope'] === 'taxonomy' && !empty($pixel['terms'])) {
+      // Get the current node from the route.
+      $node = \Drupal::routeMatch()->getParameter('node');
+    
+      // Ensure the current route corresponds to a node entity.
+      if ($node instanceof \Drupal\node\NodeInterface) {
+        //\Drupal::logger('pixel_manager')->notice('Processing node: @node_id', ['@node_id' => $node->id()]);
+    
+        // Check if the node has the specified taxonomy field.
+        if ($node->hasField('field_page_term') && !$node->get('field_page_term')->isEmpty()) {
+          //\Drupal::logger('pixel_manager')->notice('Node has field_page_term.');
+    
+          // Retrieve the referenced terms from the field.
+          $referenced_terms = $node->get('field_page_term')->referencedEntities();
+          foreach ($referenced_terms as $term) {
+            $term_name = $term->label(); // Get the term name.
+            //\Drupal::logger('pixel_manager')->notice('Checking term name: @term_name', ['@term_name' => $term_name]);
+    
+            // Check if the term name matches any in the pixel configuration.
+            if (in_array($term_name, $pixel['terms'])) {
+              //\Drupal::logger('pixel_manager')->notice('Matched term name: @term_name for pixel.', ['@term_name' => $term_name]);
+    
+              // Attach the pixel's JavaScript code.
+              $attachments['#attached']['html_head'][] = [
+                [
+                  '#type' => 'html_tag',
+                  '#tag' => 'script',
+                  '#attributes' => ['type' => 'text/javascript'],
+                  '#value' => $js_code,
+                ],
+                'pixel_manager_taxonomy_pixel_' . md5($js_code),
+              ];
+              break; // Stop checking after the first match.
+            }
+          }
+        } else {
+          //\Drupal::logger('pixel_manager')->notice('Node does not have field_page_term or it is empty.');
+        }
+      } else {
+        //\Drupal::logger('pixel_manager')->notice('Route does not correspond to a node.');
+      }
+    }
+    
+  }
+}

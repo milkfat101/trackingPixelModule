@@ -1,0 +1,9 @@
+pixel_manager.settings:
+  path: '/admin/config/system/pixel-manager'
+  defaults:
+    _form: '\Drupal\pixel_manager\Form\TrackingPixelSettingsForm'
+    _title: 'Pixel Manager Tracking Pixels'
+  requirements:
+    _permission: 'administer pixel manager'
+  options:
+    _admin_route: TRUE

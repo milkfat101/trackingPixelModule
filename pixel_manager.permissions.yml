@@ -1,0 +1,4 @@
+administer pixel manager:
+  title: 'Administer Pixel Manager'
+  description: 'Access and manage all settings for the Pixel Manager module.'
+  restrict access: TRUE
